@@ -2,12 +2,17 @@ from flask import Flask, jsonify, request
 from supabase import create_client, Client
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from dotenv import load_dotenv
+import os
+
+
+load_dotenv()
 
 app = Flask(__name__)
 
 # Supabase init
-supabase_url = "https://hyadyjyzochlbndzlgij.supabase.co"
-supabase_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh5YWR5anl6b2NobGJuZHpsZ2lqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MjcyOTg1MywiZXhwIjoyMDU4MzA1ODUzfQ.DC0_3-As0uq6cyHX5LX30-BFpTxAszjpYlSy0BBz4Tg"
+supabase_url = os.getenv('SUPABASE_URL')
+supabase_key = os.getenv('SUPABASE_KEY')
 supabase: Client = create_client(supabase_url, supabase_key)
 
 
@@ -53,23 +58,30 @@ limiter = Limiter(
 @limiter.limit("10 per minute")
 @verify_jwt(supabase)
 def hunters():
-    page = int(request.args.get('page', 1))  # Default to page 1
-    per_page = int(request.args.get('per_page', 10))  # Default to 10 items per page
+    page = int(request.args.get('page', 1) or 1)
+    per_page = int(request.args.get('per_page', 10) or 10)
 
     start = (page - 1) * per_page
-    end = start + per_page - 1
+    end = start + per_page - 1  # Ensure correct range
+
     rank = request.args.get('rank')
     name = request.args.get('name')
 
-    query = supabase.table('hunters').select('name','rank').range(start, end)
+    query = supabase.table('hunters').select('name', 'rank').range(start, end)
 
     if rank:
-        query = query.eq('rank', rank)  # Filter by rank
+        query = query.eq('rank', rank)
     if name:
-        query = query.ilike('name', f'%{name}%')  # Case-insensitive search by name
+        query = query.ilike('name', f'%{name}%')
 
-    response = query.execute()
-    return jsonify(response.data), 200
+    try:
+        response = query.execute()
+        print("Supabase Response:", response)  # Debugging output
+        return jsonify(response.data), 200
+    except Exception as e:
+        print("Error:", e)
+        return jsonify({"error": str(e)}), 500
+
 
 @app.route('/hunters/<name>', methods=['PUT'])
 def update_hunter(name):
